@@ -5,16 +5,17 @@ const express = require('express');
 const helmet = require('helmet'); // Sets secure HTTP headers
 const cors = require('cors'); // Controls which origins may call us
 const cookieParser = require('cookie-parser');
+const authRoutes = require('./routes/auth');
 const { authLimiter, globalLimiter } = require('./middleware/rateLimiters');
 
 const app = express();
 
 // --- Security & basics --- //
 
-// 1) Secure headers (XSS, clickjacking, etc.)
+//Secure headers (XSS, clickjacking, etc.)
 app.use(helmet());
 
-// 2) CORS — in dev we allow localhost frontends. Adjust when you wire a real UI.
+// CORS — in dev we allow localhost frontends. Adjust when you wire a real UI.
 //    credentials:true allows cookies (for refresh token) to be sent in later phases.
 app.use(
   cors({
@@ -23,12 +24,15 @@ app.use(
   })
 );
 
-// 3) Body + cookie parsing
+// Body + cookie parsing
 app.use(express.json());
 app.use(cookieParser());
 
-// 4) Global rate limit (coarse). We’ll add stricter limits to /auth later.
+// Global rate limit (coarse). We’ll add stricter limits to /auth later.
 app.use(globalLimiter);
+
+app.use('/auth', authLimiter); // tighter limits on auth endpoints
+app.use('/auth', authRoutes);
 
 // --- Health check --- //
 
