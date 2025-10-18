@@ -4,5 +4,6 @@ const ctrl = require('../controllers/auth');
 // Register + login
 router.post('/register', ctrl.register);
 router.post('/login', ctrl.login);
+router.post('/refresh', ctrl.refresh);
 
 module.exports = router;
