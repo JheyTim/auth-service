@@ -1,7 +1,8 @@
 // Register + Login handlers.
 // - register: creates a user with a bcrypt-hashed password
 // - login: verifies password, issues access token (JSON) + refresh token (httpOnly cookie)
-const { User, RefreshToken } = require('../models');
+const jwt = require('jsonwebtoken');
+const { User, RefreshToken, BlacklistedToken } = require('../models');
 const {
   verifyRefreshToken,
   signAccessToken,
@@ -155,6 +156,59 @@ exports.refresh = async (req, res, next) => {
 
     //  Return new access token
     return res.status(200).json({ accessToken, expiresAt: accessExp });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.logout = async (req, res, next) => {
+  try {
+    // Blacklist the *current* access token (if present)
+    // The authenticate middleware already verified it, but we need exp for TTL.
+    const auth = req.headers.authorization || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+
+    if (token) {
+      // decode (no verify needed here; we just want jti/exp; verify already done)
+      const decoded = jwt.decode(token);
+      if (decoded?.jti && decoded?.exp) {
+        await BlacklistedToken.findOrCreate({
+          where: { jti: decoded.jti },
+          defaults: { expiresAt: expToDate(decoded.exp), reason: 'logout' },
+        });
+      }
+    }
+
+    // Delete the refresh token record that matches the cookie (if present)
+    const rt = req.cookies?.[COOKIE_NAME];
+
+    // Clear cookie regardless; it’s harmless if none was present.
+    res.clearCookie(COOKIE_NAME, { ...COOKIE_OPTIONS, expires: new Date(0) });
+
+    if (rt) {
+      // If the cookie has a valid refresh token, find & delete its hashed row.
+      const payload = (() => {
+        try {
+          return verifyRefreshToken(rt);
+        } catch {
+          return null;
+        }
+      })();
+
+      if (payload?.sub) {
+        const candidates = await RefreshToken.findAll({
+          where: { userId: payload.sub },
+        });
+        for (const r of candidates) {
+          if (await compareToken(rt, r.tokenHash)) {
+            await r.destroy();
+            break; // only the current session’s record
+          }
+        }
+      }
+    }
+
+    return res.status(200).json({ ok: true });
   } catch (err) {
     next(err);
   }
