@@ -1,7 +1,7 @@
 // Validates an incoming Bearer access token, then checks blacklist.
 // If ok, attaches req.user = { id, tokenJti, tokenVersion }.
 const { verifyAccessToken } = require('../utils/jwt');
-const { BlacklistedToken } = require('../models');
+const { BlacklistedToken, User } = require('../models');
 
 const auth = async (req, res, next) => {
   try {
@@ -19,6 +19,18 @@ const auth = async (req, res, next) => {
     });
 
     if (revoked) return res.status(401).json({ error: 'Token revoked' });
+
+    // tokenVersion check (DB)
+    const user = await User.findByPk(payload.sub, {
+      attributes: ['id', 'tokenVersion'],
+    });
+
+    if (!user || user.tokenVersion !== payload.tokenVersion) {
+      // If tokenVersion changed, treat as expired session
+      return res
+        .status(401)
+        .json({ error: 'Session invalidated. Please log in again.' });
+    }
 
     // Attach identity to the request for downstream handlers
     req.user = {

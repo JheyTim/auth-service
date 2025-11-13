@@ -6,9 +6,11 @@ const helmet = require('helmet'); // Sets secure HTTP headers
 const cors = require('cors'); // Controls which origins may call us
 const cookieParser = require('cookie-parser');
 const authRoutes = require('./routes/auth');
+const sessionRoutes = require('./routes/session');
+const adminRoutes = require('./routes/admin');
 const { authLimiter, globalLimiter } = require('./middleware/rateLimiters');
-// const authenticate = require('./middleware/auth');
-// const requireAuth = require('./middleware/requireAuth');
+const authenticate = require('./middleware/auth');
+const requireAuth = require('./middleware/requireAuth');
 
 const app = express();
 
@@ -35,6 +37,8 @@ app.use(globalLimiter);
 
 app.use('/auth', authLimiter); // tighter limits on auth endpoints
 app.use('/auth', authRoutes);
+app.use('/auth', sessionRoutes); // authenticated user session management
+app.use('/admin', adminRoutes); // admin maintenance endpoints
 
 // --- Health check --- //
 
@@ -47,9 +51,9 @@ app.get('/health', (_req, res) => {
   });
 });
 
-// app.get('/me', authenticate, requireAuth, (req, res) => {
-//   res.json({ id: req.user.id, msg: 'Access token valid.' });
-// });
+app.get('/me', authenticate, requireAuth, (req, res) => {
+  res.json({ id: req.user.id, msg: 'Access token valid.' });
+});
 
 // --- 404 + centralized error handler --- //
 
